@@ -1,0 +1,69 @@
+from tree_sitter import Language, Parser
+import os
+from pymongo import MongoClient
+
+# MongoDB Setup
+client = MongoClient('mongodb://localhost:27017/')
+db = client['prolution_analysis']
+
+# The path for the generated language library .so file.
+# Let's place it in a 'build' directory within your Flask project directory.
+lib_build_path = os.path.join(os.getcwd(), 'build', 'my-languages.so')
+
+# Path to the tree-sitter-python grammar repository.
+# Adjust this path according to where the tree-sitter-python directory is on your system.
+tree_sitter_python_path = os.path.join(os.getcwd(), 'tree-sitter-python')
+
+# Build the Tree-sitter language library if it's not already built
+if not os.path.exists(lib_build_path):
+    Language.build_library(
+        # Store the library in the 'build' directory within your project directory
+        lib_build_path,
+        # Path to the tree-sitter-python grammar source
+        [tree_sitter_python_path]
+    )
+
+# Load the Tree-sitter Python grammar
+PYTHON_LANGUAGE = Language(lib_build_path, 'python')
+parser = Parser()
+parser.set_language(PYTHON_LANGUAGE)
+
+# Functions to insert data into MongoDB
+def insert_function_into_mongodb(function_name, file_path):
+    db.functions.insert_one({
+        "name": function_name,
+        "file_location": file_path
+    })
+
+def insert_class_into_mongodb(class_name, file_path):
+    db.classes.insert_one({
+        "name": class_name,
+        "file_location": file_path
+    })
+
+# Function to process each node
+def process_node(node, file_path):
+    if node.type == 'function_definition':
+        function_name = node.child_by_field_name('name').text.decode('utf-8')
+        insert_function_into_mongodb(function_name, file_path)
+    elif node.type == 'class_definition':
+        class_name = node.child_by_field_name('name').text.decode('utf-8')
+        insert_class_into_mongodb(class_name, file_path)
+    # Process children recursively
+    for child in node.children:
+        process_node(child, file_path)
+
+# Function to parse and store the contents of a file
+def parse_and_store(file_path):
+    with open(file_path, 'rb') as file:
+        source_code = file.read()
+    tree = parser.parse(source_code)
+    process_node(tree.root_node, file_path)
+
+# Main execution: iterate over the 'src' directory and process each Python file
+src_directory = os.path.join(os.getcwd(), 'src')  # Path to the 'src' directory within the Flask project
+for subdir, dirs, files in os.walk(src_directory):
+    for file in files:
+        if file.endswith('.py'):
+            file_path = os.path.join(subdir, file)
+            parse_and_store(file_path)

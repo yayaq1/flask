@@ -1,0 +1,41 @@
+from radon.complexity import cc_visit, cc_rank
+from pymongo import MongoClient
+import os
+
+# MongoDB setup
+client = MongoClient('mongodb://localhost:27017/')
+db = client['prolution_analysis']
+
+# Ensure you have a collection for complexity analysis
+complexity_collection = db['complexity_analysis']
+
+# Function to calculate Cyclomatic Complexity
+def calculate_complexity(source_code):
+    return cc_visit(source_code)
+
+# Function to insert complexity data into MongoDB
+def insert_complexity_into_mongodb(data, filepath):
+    for item in data:
+        complexity_collection.insert_one({
+            'file_path': filepath,
+            'function_name': item.name,
+            'complexity_score': item.complexity,
+            'complexity_rank': cc_rank(item.complexity),
+            'start_line': item.lineno,
+            'end_line': item.endline
+        })
+
+# Function to analyze a directory of Python files
+def analyze_directory(directory_path):
+    for subdir, dirs, files in os.walk(directory_path):
+        for file in files:
+            if file.endswith('.py'):
+                file_path = os.path.join(subdir, file)
+                with open(file_path, 'r') as code_file:
+                    code = code_file.read()
+                complexity_data = calculate_complexity(code)
+                insert_complexity_into_mongodb(complexity_data, file_path)
+
+# Run the analysis on the Flask 'src' directory
+src_directory_path = 'src/flask/'
+analyze_directory(src_directory_path)

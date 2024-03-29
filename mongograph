@@ -1,0 +1,29 @@
+import networkx as nx
+import matplotlib.pyplot as plt
+from pymongo import MongoClient
+
+# Connect to MongoDB
+client = MongoClient('mongodb://localhost:27017/')
+db = client['prolution_analysis']
+
+# Create the graph
+G = nx.DiGraph()
+
+# Query the `function_calls` collection
+function_calls = db.function_calls.find()
+
+for call in function_calls:
+    # Assuming each 'call' document has 'caller' and 'callee' fields
+    G.add_node(call['caller'])
+    G.add_node(call['callee'])
+    G.add_edge(call['caller'], call['callee'])
+
+# Now G contains the call graph. You can visualize it using matplotlib or Graphviz.
+# If the graph is large, it may be more practical to output in a format compatible
+# with Graphviz rather than trying to plot directly in matplotlib.
+
+# Write the graph in dot format
+nx.drawing.nx_pydot.write_dot(G, 'call_graph.dot')
+
+# Use Graphviz command-line tools to generate the graph image
+# dot -Tpng call_graph.dot -o call_graph.png
